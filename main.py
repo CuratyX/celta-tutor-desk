@@ -4,7 +4,6 @@ import os
 from datetime import datetime
 import hashlib
 
-# ====================== CONFIG ======================
 st.set_page_config(
     page_title="CELTA Tutor Desk",
     page_icon="📘",
@@ -14,7 +13,6 @@ st.set_page_config(
 
 DATA_FILE = "data.json"
 
-# ====================== HELPERS ======================
 def hash_password(password):
     return hashlib.sha256(password.encode()).hexdigest()
 
@@ -39,51 +37,41 @@ def save_data(data):
 
 data = load_data()
 
-# ====================== SESSION STATE ======================
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
     st.session_state.role = None
     st.session_state.user_id = None
-    st.session_state.name = None
 
 if "errors" not in st.session_state:
     st.session_state.errors = []
 
-# ====================== LOGIN PAGE ======================
 def login_page():
     st.title("📘 CELTA Tutor Desk")
-    st.subheader("Login")
+    st.write("Please login to continue")
+    st.write("")
 
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        username = st.text_input("Username")
-        password = st.text_input("Password", type="password")
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
 
-        if st.button("Login", type="primary", use_container_width=True):
-            # Teacher login
-            if username == data["teacher"]["username"] and hash_password(password) == data["teacher"]["password"]:
+    if st.button("Login", type="primary"):
+        if username == data["teacher"]["username"] and hash_password(password) == data["teacher"]["password"]:
+            st.session_state.logged_in = True
+            st.session_state.role = "teacher"
+            st.rerun()
+
+        for sid, student in data["students"].items():
+            if student.get("username") == username and student.get("password") == hash_password(password):
                 st.session_state.logged_in = True
-                st.session_state.role = "teacher"
-                st.session_state.name = "Teacher"
+                st.session_state.role = "student"
+                st.session_state.user_id = sid
                 st.rerun()
 
-            # Student login
-            for sid, student in data["students"].items():
-                if student.get("username") == username and student.get("password") == hash_password(password):
-                    st.session_state.logged_in = True
-                    st.session_state.role = "student"
-                    st.session_state.user_id = sid
-                    st.session_state.name = student["name"]
-                    st.rerun()
+        st.error("Incorrect username or password")
 
-            st.error("Incorrect username or password")
-
-# ====================== TEACHER DASHBOARD ======================
 def teacher_dashboard():
     with st.sidebar:
-        st.title("📘 Teacher Panel")
+        st.title("Teacher Panel")
         st.caption("Logged in as Teacher")
-        st.divider()
         menu = st.radio("Menu", ["Students", "Live Lesson", "History", "Create Student Login", "Logout"])
 
     if menu == "Logout":
@@ -92,19 +80,16 @@ def teacher_dashboard():
         st.session_state.errors = []
         st.rerun()
 
-    # ---------- CREATE STUDENT LOGIN ----------
     if menu == "Create Student Login":
         st.header("Create Student Login")
-        st.info("Create a username and password so the student can log in and see their progress.")
 
         with st.form("create_student"):
             name = st.text_input("Student Full Name")
             level = st.selectbox("CEFR Level", ["A1", "A2", "B1", "B2", "C1", "C2"])
             goals = st.text_area("Learning Goals")
-            username = st.text_input("Username (for student login)")
-            password = st.text_input("Password (for student login)", type="password")
-
-            submitted = st.form_submit_button("Create Student", type="primary")
+            username = st.text_input("Username")
+            password = st.text_input("Password", type="password")
+            submitted = st.form_submit_button("Create Student")
 
             if submitted:
                 if name and username and password:
@@ -119,26 +104,87 @@ def teacher_dashboard():
                         "homework": []
                     }
                     save_data(data)
-                    st.success(f"Student '{name}' created successfully! Username: {username}")
+                    st.success(f"Student created! Username: {username}")
                 else:
-                    st.warning("Please fill all required fields.")
+                    st.warning("Please fill all fields")
 
-    # ---------- STUDENTS LIST ----------
     elif menu == "Students":
         st.header("Students")
         if not data["students"]:
             st.info("No students yet. Create one from 'Create Student Login'.")
         else:
             for sid, student in data["students"].items():
-                with st.container(border=True):
-                    st.markdown(f"**{student['name']}** · `{student['level']}`")
-                    st.caption(f"Username: `{student['username']}`")
-                    if student.get("goals"):
-                        st.caption(student["goals"][:120])
+                st.markdown(f"**{student['name']}** — {student['level']}")
+                st.caption(f"Username: {student['username']}")
+                st.write("---")
 
-    # ---------- LIVE LESSON ----------
     elif menu == "Live Lesson":
         st.header("Live Lesson")
 
         if not data["students"]:
-            st.warning
+            st.warning("Please create a student first.")
+        else:
+            student_options = {sid: f"{s['name']} ({s['level']})" for sid, s in data["students"].items()}
+            selected_id = st.selectbox("Select Student", list(student_options.keys()), format_func=lambda x: student_options[x])
+            student = data["students"][selected_id]
+
+            st.subheader(f"{student['name']} ({student['level']})")
+            if student.get("goals"):
+                st.caption(f"Goals: {student['goals']}")
+
+            st.write("---")
+
+            focus = st.selectbox("Today's Focus", ["Grammar", "Vocabulary", "Speaking Fluency", "Listening", "Reading", "Writing", "Pronunciation", "Mixed Skills"])
+            topic = st.text_input("Topic / Context")
+
+            st.write("---")
+            st.subheader("Live Error Log")
+
+            with st.form("error_form", clear_on_submit=True):
+                error_input = st.text_input("Type student error")
+                add_error = st.form_submit_button("Add Error")
+                if add_error and error_input.strip():
+                    st.session_state.errors.append(error_input.strip())
+
+            if st.session_state.errors:
+                for i, err in enumerate(st.session_state.errors):
+                    col1, col2 = st.columns([6, 1])
+                    with col1:
+                        st.write(f"{i+1}. {err}")
+                    with col2:
+                        if st.button("X", key=f"del{i}"):
+                            st.session_state.errors.pop(i)
+                            st.rerun()
+
+            st.write("---")
+            notes = st.text_area("Session Notes")
+
+            if st.button("Save Lesson", type="primary"):
+                session = {
+                    "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+                    "focus": focus,
+                    "topic": topic,
+                    "errors": st.session_state.errors.copy(),
+                    "notes": notes
+                }
+                data["students"][selected_id]["sessions"].append(session)
+                save_data(data)
+                st.session_state.errors = []
+                st.success("Lesson saved!")
+                st.balloons()
+
+    elif menu == "History":
+        st.header("Student History")
+        if not data["students"]:
+            st.info("No students yet.")
+        else:
+            student_options = {sid: f"{s['name']} ({s['level']})" for sid, s in data["students"].items()}
+            selected_id = st.selectbox("Select Student", list(student_options.keys()), format_func=lambda x: student_options[x])
+            student = data["students"][selected_id]
+
+            if not student["sessions"]:
+                st.info("No lessons recorded yet.")
+            else:
+                for session in reversed(student["sessions"]):
+                    with st.expander(f"{session['date']} | {session['focus']}"):
+                        st.write(f"**Notes:** {session.get('notes',
