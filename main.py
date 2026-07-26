@@ -104,7 +104,7 @@ def teacher_dashboard():
                         "homework": []
                     }
                     save_data(data)
-                    st.success(f"Student created! Username: {username}")
+                    st.success("Student created successfully! Username: " + username)
                 else:
                     st.warning("Please fill all fields")
 
@@ -114,8 +114,8 @@ def teacher_dashboard():
             st.info("No students yet. Create one from 'Create Student Login'.")
         else:
             for sid, student in data["students"].items():
-                st.markdown(f"**{student['name']}** — {student['level']}")
-                st.caption(f"Username: {student['username']}")
+                st.markdown("**" + student["name"] + "** — " + student["level"])
+                st.caption("Username: " + student["username"])
                 st.write("---")
 
     elif menu == "Live Lesson":
@@ -124,13 +124,13 @@ def teacher_dashboard():
         if not data["students"]:
             st.warning("Please create a student first.")
         else:
-            student_options = {sid: f"{s['name']} ({s['level']})" for sid, s in data["students"].items()}
+            student_options = {sid: s["name"] + " (" + s["level"] + ")" for sid, s in data["students"].items()}
             selected_id = st.selectbox("Select Student", list(student_options.keys()), format_func=lambda x: student_options[x])
             student = data["students"][selected_id]
 
-            st.subheader(f"{student['name']} ({student['level']})")
+            st.subheader(student["name"] + " (" + student["level"] + ")")
             if student.get("goals"):
-                st.caption(f"Goals: {student['goals']}")
+                st.caption("Goals: " + student["goals"])
 
             st.write("---")
 
@@ -150,9 +150,9 @@ def teacher_dashboard():
                 for i, err in enumerate(st.session_state.errors):
                     col1, col2 = st.columns([6, 1])
                     with col1:
-                        st.write(f"{i+1}. {err}")
+                        st.write(str(i+1) + ". " + err)
                     with col2:
-                        if st.button("X", key=f"del{i}"):
+                        if st.button("X", key="del" + str(i)):
                             st.session_state.errors.pop(i)
                             st.rerun()
 
@@ -178,7 +178,7 @@ def teacher_dashboard():
         if not data["students"]:
             st.info("No students yet.")
         else:
-            student_options = {sid: f"{s['name']} ({s['level']})" for sid, s in data["students"].items()}
+            student_options = {sid: s["name"] + " (" + s["level"] + ")" for sid, s in data["students"].items()}
             selected_id = st.selectbox("Select Student", list(student_options.keys()), format_func=lambda x: student_options[x])
             student = data["students"][selected_id]
 
@@ -186,5 +186,52 @@ def teacher_dashboard():
                 st.info("No lessons recorded yet.")
             else:
                 for session in reversed(student["sessions"]):
-                    with st.expander(f"{session['date']} | {session['focus']}"):
-                        st.write(f"**Notes:** {session.get('notes',
+                    with st.expander(session["date"] + " | " + session["focus"]):
+                        notes_text = session.get("notes", "-")
+                        st.write("**Notes:** " + str(notes_text))
+                        if session.get("errors"):
+                            st.write("**Errors:**")
+                            for e in session["errors"]:
+                                st.write("- " + e)
+
+def student_dashboard():
+    student = data["students"][st.session_state.user_id]
+
+    with st.sidebar:
+        st.title("My Progress")
+        st.caption("Hello, " + student["name"])
+        menu = st.radio("Menu", ["My Lessons", "Logout"])
+
+    if menu == "Logout":
+        st.session_state.logged_in = False
+        st.session_state.role = None
+        st.rerun()
+
+    st.header("Welcome, " + student["name"])
+    st.caption("Level: " + student["level"])
+    if student.get("goals"):
+        st.info("Your Goals: " + student["goals"])
+
+    st.write("---")
+    st.subheader("Your Past Lessons")
+
+    if not student["sessions"]:
+        st.info("No lessons recorded yet.")
+    else:
+        for session in reversed(student["sessions"]):
+            with st.expander(session["date"] + " | " + session["focus"]):
+                notes_text = session.get("notes", "-")
+                st.write("**Teacher Notes:** " + str(notes_text))
+                if session.get("errors"):
+                    st.write("**Errors:**")
+                    for e in session["errors"]:
+                        st.write("- " + e)
+
+# ====================== MAIN ======================
+if not st.session_state.logged_in:
+    login_page()
+else:
+    if st.session_state.role == "teacher":
+        teacher_dashboard()
+    elif st.session_state.role == "student":
+        student_dashboard()
